@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "duo-access-gateway.fullname" . }}
+  labels:
+    {{- include "duo-access-gateway.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "duo-access-gateway.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "duo-access-gateway.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "duo-access-gateway.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: duo-access-gateway-data
+      initContainers:
+        - name: init-duo-access-gateway
+          image: "busybox"
+          command: ["sh", "-c", "mkdir -p /data/cert /data/metadata /data/log/supervisor /data/log/php-fpm /data/log/nginx /data/config && chmod 777 -R /data"]
+          volumeMounts:
+          - name: data
+            subPath: data # no more .last+found folder
+            mountPath: /data
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- if .Values.image.tagSha256 }}
+          image: "{{ .Values.image.repository }}@sha256:{{ .Values.image.tagSha256 }}"
+          {{- else }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["bash", "-c", "rm /data/cert/web.crt /data/cert/web.key; ln -s /certificate/tls.crt /data/cert/web.crt; ln -s /certificate/tls.key /data/cert/web.key; exec /usr/local/bin/supervisord --configuration /etc/supervisor/supervisord.conf"]
+          ports:
+          - name: http
+            containerPort: 8000
+          - name: https
+            containerPort: 4443
+          - name: admin-https
+            containerPort: 8443
+          env:
+          - name: TERM
+            value: xterm
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+          - mountPath: /data
+            subPath: data # no more .lost+found folder
+            name: data
+          - mountPath: /certificate
+            name: certificate
+          {{- end }}
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: 4443
+          # readinessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: 4443
+          #     scheme: HTTP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "duo-access-gateway.fullname" . }}
+        - name: certificate
+          secret:
+            secretName: {{ .Values.certificate.secretName }}
