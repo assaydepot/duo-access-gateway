@@ -7,4 +7,4 @@ How to use
 ---
 
     git clone git@github.com:assaydepot/duo-access-gateway.git
-    helm -n duo upgrade --install dag -f /values/duo-access-gateway.yaml .
+    helm -n duo upgrade --install dag .
