@@ -37,6 +37,7 @@ securityContext: {}
   # runAsNonRoot: true
   # runAsUser: 1000
 
+hostName: duo.scientist.com
 service:
   type: LoadBalancer
   annotations:
@@ -87,4 +88,4 @@ persistence:
   size: "20Gi"
 
 certificate:
-  secretName: duo-access-gateway-certificate
+  secretName: duo-access-gateway-cert
